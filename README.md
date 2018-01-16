@@ -10,8 +10,10 @@ This project using Micrichip MLA codes.
 
 ## 使用したもの / dependency
  + Microchip MLA (https://www.microchip.com/ja/mplab/microchip-libraries-for-applications)
-+ PIC HID Bootloader (http://www3.airnet.ne.jp/saka/hardware/pic-bootloader/pic-bootloader01.html)
+ + PIC HID Bootloader (http://www3.airnet.ne.jp/saka/hardware/pic-bootloader/pic-bootloader01.html)
 
 ## 参考 / referenced docs
  + プレイステーション・ＰＡＤ／メモリ・インターフェースの解析（http://kaele.com/~kashima/games/ps_jpn.txt）
 
+## 回路 / circuit
+ kairo.pngを参照
