@@ -1,4 +1,4 @@
-このプロジェクトはマイクロチップ社のMLAコードを使用しています。
+このプロジェクトはマイクロチップ社のMLAコードを使用しています。  
 This project using Micrichip MLA codes.
 
 ## 機能 / feature
@@ -8,7 +8,7 @@ This project using Micrichip MLA codes.
  + Connect PSX pad to PC by USB
  + PSX memcard read/write (slow)
 
-## 使用したもの / Dependents
+## 使用したもの / dependency
  + Microchip MLA (https://www.microchip.com/ja/mplab/microchip-libraries-for-applications)
 + PIC HID Bootloader (http://www3.airnet.ne.jp/saka/hardware/pic-bootloader/pic-bootloader01.html)
 
