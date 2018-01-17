@@ -17,3 +17,11 @@ This project using Micrichip MLA codes.
 
 ## 回路 / circuit
  kairo.pngを参照
+ 
+## ライセンス / Licence
+ + MLA部分については、Microchip社のライセンスを継承します。 
+ + その他の部分については、パブリックメインとします。
+ + 詳しくは、ソースコードの先頭部分もしくはLICENCEファイルを見てください。
+ + The MLA part, we will inherit Microchip's license.
+ + Other parts, we will make it public main.
+ + For details, see the header of codes or the LICENCE file.
