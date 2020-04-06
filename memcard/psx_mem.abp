@@ -1,0 +1,303 @@
+#console
+#include <RGBALib.sbp>
+#include <easyHID.sbp>
+
+Main()
+End
+
+
+Sub Main()
+	Print "PSX Memdumper for SFC/PSX USB Gamepad Interface - PROGRAMMED BY RGBA_CRT 2017"
+
+	Dim h as EASY_HID_HANDLE
+	Dim psm AS *HID_PSX_MEMCARD
+
+	h=EasyHID_openEx(&H04D8,&H005E,4,FALSE)
+	if h=NULL Then Print "Device not found.":End
+	printf(ex"DevicePath : %s\n ->venderID  : 0x%04X\n ->productID : 0x%04X\n ->reportID = %d\n ->inSize : %d\n ->outSizse : %d\n ->featureSizse : %\n\n",_
+		h->devicePath,h->attr.VendorID,h->attr.ProductID,h->caps_value.ReportID,h->caps.InputReportByteLength,h->caps.OutputReportByteLength,h->caps.FeatureReportByteLength)
+	psm = new HID_PSX_MEMCARD(h)
+
+	Dim cmd AS String,buf[128*2] As Byte
+
+	Print "1. Dump Memcard"
+	Print "2. Write Memcard"
+	Print "3. Port sate"
+
+	Input ">",cmd
+
+	if cmd="1" Then
+		Input ex"Insert memcard port A \nSave file name : ",cmd
+		dumpMemory(cmd,0,psm)
+
+	Elseif cmd="2" Then
+		Input ex"Insert memcard port A \nWrite file name : ",cmd
+		writeMemFull(cmd,0,psm)
+
+	Elseif cmd="3" Then
+		Do
+			Locate 0,14
+			memStatus(psm)
+			Sleep(100)
+		Loop
+	Endif
+
+EndSub
+
+Sub memStatus(psm AS *HID_PSX_MEMCARD)
+	Dim p1s AS BytePtr, p2s AS BytePtr,memstate AS Byte
+	memstate=psm->GetMemoryInsertState()
+	if memstate And 1 Then
+		p1s = "   INSERTED    "
+	Else
+		p1s = " NOT INSERTED  "
+	End If
+	if memstate>>1 And 1 Then
+		p2s = "   INSERTED    "
+	Else
+		p2s = " NOT INSERTED  "
+	End If
+	if memstate<>&H80 Then
+		printf(ex"Memory card : \n\t\t\t\tPORT1 [%s]\t\tPORT2 [%s]\n\n",p1s,p2s)
+	Else
+		printf(ex"Device Notfound\n",p1s,p2s)
+	End If
+End Sub
+
+
+
+Sub writeMemFull(path AS BytePtr,port AS Long, psm AS *HID_PSX_MEMCARD)
+	Dim in AS File,buf[128] AS Byte
+	Dim adr AS DWord
+	Dim lap AS Long,lape AS Long
+	if in.openFile(path,GENERIC_READ)=FALSE Then
+		Print "Open err"
+		ExitSub
+	End If
+
+	psm->setAddress(port,0)
+	
+	Dim i AS Long,e AS Long
+	
+	in.read(buf,128)
+	For adr = 0 To PSX_MEM_NUM_BLOCKS*PSX_MEM_NUM_FRAMES-1
+		printf("[WRITE]Address : %04X  progress : %d%%  ErrorCount : %d %d              ",adr,(adr/(PSX_MEM_NUM_BLOCKS*PSX_MEM_NUM_FRAMES)*100) AS DWord,e,lape-lap)
+		ConsoleReturnLine()
+		lap = GetTickCount()
+		if psm->WriteCurrentFrame(buf) = FALSE Then 
+			e++
+			psm->setAddress(port,adr)
+			adr--
+			Continue
+		End If		
+		in.read(buf,128)
+		lape = GetTickCount()
+	Next adr
+End Sub
+
+Sub dumpMemory(filename AS BytePtr, port AS Long, psm AS *HID_PSX_MEMCARD)
+	Dim buf[PSX_MEM_FRAME_SIZE] AS Byte,i AS Long
+	Dim out AS File
+	Dim adr AS DWord,e AS Long
+	Dim lap AS Long,lape AS Long
+
+	out.openFile(filename,GENERIC_WRITE)
+
+	psm->setAddress(port,0)
+	For adr = 0 To PSX_MEM_NUM_BLOCKS*PSX_MEM_NUM_FRAMES-1
+		Locate 0,16
+		printf("[READ]Address : %04X  progress : %d%%  ErrorCount : %d %d   ",adr,(adr/(PSX_MEM_NUM_BLOCKS*PSX_MEM_NUM_FRAMES)*100) AS DWord,e,lape-lap)
+		ConsoleReturnLine()
+		lap = GetTickCount()
+		if psm->ReadCurrentFrame(buf) = FALSE Then 
+			e++
+			psm->setAddress(port,adr)
+			adr--
+			Continue
+		End If
+		lape = GetTickCount()
+		out.write(buf,PSX_MEM_FRAME_SIZE)
+	Next i
+
+	out.close()
+
+	Print "ok"
+	Dump(buf,128)
+End Sub
+
+
+
+Const PSXMEM_MAX_ERR_COUNT = 10
+Const PSX_MEM_REPORT_ID = 5
+
+Type PSX_MEM_PROCOTOL
+	reportID AS Byte
+	cmd As Byte
+	checksum AS Byte
+	data[PSX_MEM_BANK_SIZE-1] AS Byte
+End Type
+
+enum PSX_MEM_COMMANDS
+	PM_LED_BLINK = &H10
+    PM_SET_PARAMS
+    PM_GET_MEM_PORT_STATE
+    PM_READ_TO_BUFFER
+    PM_WRITE_TO_MEMCARD
+    PM_READ_BANK0 = &H40
+    PM_WRITE_BANK0 = &H50
+    PM_ERROR = &H80 'エラー時はMSBが1になる    
+    PM_INVALID_COMMAND = &HFF
+End Enum
+
+Const HPM_RETRY_MAX = 1000
+
+Const PSX_MEM_BANK_SIZE = 32+11
+Const PSX_MEM_FRAME_SIZE = 128
+Const PSX_MEM_NUM_BLOCKS = 16
+Const PSX_MEM_NUM_FRAMES = 64
+
+Class HID_PSX_MEMCARD
+Private
+	h AS EASY_HID_HANDLE
+	out AS PSX_MEM_PROCOTOL
+	in AS PSX_MEM_PROCOTOL
+	nowAddress As Word
+
+Public
+	Sub HID_PSX_MEMCARD(easy_hid_handle AS EASY_HID_HANDLE)
+		h=easy_hid_handle
+	End Sub
+
+	'bit0:SLOT1 , bit1:SLOT2
+	Function GetMemoryInsertState() AS Byte
+		out.cmd = PM_GET_MEM_PORT_STATE
+		EasyHID_flushBuffer(h)
+		if sendCommand()=FALSE Then GetMemoryInsertState = &H80:ExitFunction
+	
+		GetMemoryInsertState=in.data[0] or in.data[1]<<1
+	End Function
+
+	Function ReadCurrentFrame(memcard_buffer AS BytePtr) AS BOOL
+		Dim procAddress As Word
+		Dim buf[PSX_MEM_BANK_SIZE*4] AS Byte
+		procAddress=nowAddress
+	
+		'PICのメモリにフレームロード
+	'	setAddress(0,nowAddress)
+		out.cmd = PM_READ_TO_BUFFER
+		nowAddress++	'デバイス側は自動インクリメント
+		sendCommand()
+
+		if in.cmd And &H80 Then
+			Print
+			Print "MEMORY CARD READ ERROR"
+			Print
+			memcpy(buf,in.data,32)
+			Dump(buf,32)
+			ExitFunction
+		End If
+
+		memcpy(buf,in.data,PSX_MEM_BANK_SIZE)
+
+		'PICから読み出し
+		Dim i AS Long
+		For i = 1 To 2
+			out.cmd=PM_READ_BANK0 + i
+			sendCommand()
+
+			memcpy(buf+PSX_MEM_BANK_SIZE*i,in.data,PSX_MEM_BANK_SIZE)
+		Next i	
+
+		if in.checksum <> calcXOR(procAddress,buf) Then
+			printf(ex"\n[CHECKSUM ERROR] %04X : %02X != %02X\n",procAddress,in.checksum,calcXOR(procAddress,buf))
+			ExitFunction
+		End If
+
+		memcpy(memcard_buffer,buf,PSX_MEM_FRAME_SIZE)		
+		ReadCurrentFrame=TRUE
+	End Function
+
+	Function WriteCurrentFrame(buf AS BytePtr) AS BOOL
+		Dim procAddress As Word
+		procAddress=nowAddress
+	
+		'PICのメモリに転送
+		Dim i AS Long
+		For i = 0 To 2
+			out.cmd=PM_WRITE_BANK0 + i
+			memcpy(out.data,buf+PSX_MEM_BANK_SIZE*i,PSX_MEM_BANK_SIZE)
+			sendCommand(TRUE)
+		Next i	
+
+		'メモカに転送
+		out.cmd = PM_WRITE_TO_MEMCARD
+		out.checksum = calcXOR(procAddress,buf)
+		nowAddress++
+		sendCommand(FALSE,TRUE)
+	
+		if in.checksum <> out.checksum then debug
+		if in.cmd And &H80 Then
+			Print 
+			Print "MEMORY WRITE ERROR"
+			Print
+			ExitFunction
+		End If
+
+		WriteCurrentFrame=TRUE
+	End Function
+
+
+	Sub setAddress(port AS Byte,Address AS Word)
+		out.cmd = PM_SET_PARAMS
+		out.data[0]=Address
+		out.data[1]=Address>>8
+		out.data[2]=port	'port
+
+		'エラーが多いようならチェック機構を入れる
+		sendCommand()
+		nowAddress = Address
+	End Sub
+
+	Function getAddress() AS Word
+		getAddress=nowAddress
+	End Function
+
+Private
+
+	Function sendCommand()(noRead AS BOOL,matchChecksum AS BOOL) AS BOOL
+		'バッファクリア
+		EasyHID_flushBuffer(h)
+
+		'送信
+		out.reportID=PSX_MEM_REPORT_ID
+		sendCommand = EasyHID_write(h,VarPtr(out))
+		if sendCommand=FALSE Then ExitFunction
+		if noRead=TRUE Then ExitFunction
+
+		Dim e AS Long
+*HPM_READ_RETRY
+		'Sleep(1)
+		sendCommand = EasyHID_read(h,VarPtr(in))
+		if sendCommand=FALSE Then ExitFunction
+		if (in.cmd And &H7F) <> out.cmd Then 
+			e++
+			if e < PSXMEM_MAX_ERR_COUNT Then Goto *HPM_READ_RETRY
+			sendCommand=FALSE
+		End If
+'		if (matchChecksum=TRUE) And (in.checksum<>out.checksum) Then Sleep(10):Goto *HPM_READ_RETRY
+
+/*		printf("[PIC_HID_CMD] OUT[ CMD:%02X XOR:%02X ]  IN[ CMD:%02X XOR:%02X ] e:%d OUT:",out.cmd,out.checksum,in.cmd,in.checksum,e)
+		Dump(out.data,3,0,TRUE)
+		Print*/
+	End Function
+
+	Function calcXOR(Address AS Word,data AS BytePtr) AS Byte
+		Dim i AS Long
+		calcXOR=Address >> 8
+		calcXOR = calcXOR xor (Address And &HFF)
+		For i=0 To 127
+			calcXOR = calcXOR xor data[i]
+		Next i	
+	End Function
+End Class
+
