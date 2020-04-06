@@ -82,13 +82,15 @@ MAIN_RETURN main(void)
         jid++;
         if (jid > JOYSTICK_ID_MAX) jid = JOYSTICK_ID_MIN;
 
-        if (lpc++ > 50) {
-            updateSNESPad();
-            lpc = 0;
-        } else if (lpc % 50 == 0) { //120fpsくらいにはなる
+        lpc++;
+        if (lpc % 50 == 1)
+            updateSNESPad(); 
+        
+        if (lpc % 50 == 0) { //120fpsくらいにはなる
             updatePSXpad(0);
             updatePSXpad(1);
         }
+        
 
         LATCbits.LATC3=isSNESPadConnected(0) | isPSXPadConnected(0);
 		LATCbits.LATC4=isSNESPadConnected(1) | isPSXPadConnected(1) | led;
