@@ -16,7 +16,7 @@ This project using Micrichip MLA codes.
  + プレイステーション・ＰＡＤ／メモリ・インターフェースの解析（http://kaele.com/~kashima/games/ps_jpn.txt）
 
 ## 回路 / circuit
-![kairo](kairo.png)
+![kairo](kairo.PNG)
  
 ## ライセンス / Licence
  + MLA部分については、Microchip社のライセンスを継承します。 
